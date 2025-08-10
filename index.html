@@ -1,0 +1,328 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>용어 매칭 카드 뒤집기 (고정 세트)</title>
+<style>
+  :root {
+    --bg: #0f1020;
+    --panel: #1b1d36;
+    --accent: #9b8cff;
+    --accent-2: #6ee7ff;
+    --ok: #45d38a;
+    --text: #eef2ff;
+    --muted: #aab1d6;
+    --card-front: #ffffff;
+    --card-back: #c9c2ff;
+    --shadow: rgba(0,0,0,.25);
+    --radius: 16px;
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; }
+  body {
+    margin: 0; padding: 0;
+    font-family: system-ui, -apple-system, Segoe UI, Roboto, Pretendard, Apple SD Gothic Neo, "Noto Sans KR", sans-serif;
+    color: var(--text);
+    background: radial-gradient(1200px 800px at 20% 0%, #1b1d36 0, #0f1020 60%, #0b0c1a 100%);
+    display: flex; flex-direction: column; gap: 16px;
+  }
+  header { padding: 20px 16px 0; }
+  header h1 { margin: 0 0 8px; font-size: clamp(22px, 4vw, 32px); letter-spacing: .2px; }
+  header p { margin: 0; color: var(--muted); }
+  .toolbar { margin: 8px 16px 0; display: flex; gap: 10px; align-items: center; }
+  button {
+    background: var(--panel); color: var(--text);
+    border: 1px solid rgba(255,255,255,.08);
+    border-radius: 12px; padding: 10px 14px; font-size: 14px; cursor: pointer;
+    transition: transform .03s ease, filter .2s ease, box-shadow .2s ease;
+    box-shadow: 0 6px 16px -6px var(--shadow);
+    display: inline-flex; align-items: center; gap: 8px;
+  }
+  button.primary { background: linear-gradient(90deg, var(--accent), var(--accent-2)); color: #0b0c1a; border: none; }
+  button:active { transform: translateY(1px); }
+
+  .stats {
+    margin: 0 16px; padding: 8px 12px;
+    display: flex; gap: 16px; flex-wrap: wrap; align-items: center;
+    color: var(--muted);
+  }
+  .stats .pill { background: rgba(255,255,255,.06); padding: 6px 10px; border-radius: 999px; border: 1px solid rgba(255,255,255,.08); }
+
+  main {
+    flex: 1;
+    display: grid; grid-template-columns: 1fr; gap: 16px;
+    padding: 0 16px 20px; min-height: 0;
+  }
+  .board-wrap {
+    background: rgba(255,255,255,.04);
+    border: 1px solid rgba(255,255,255,.08);
+    border-radius: var(--radius);
+    padding: 16px;
+    display: grid;
+  }
+  .board { --cols: 5; display: grid; gap: 12px; grid-template-columns: repeat(var(--cols), minmax(0, 1fr)); align-content: start; }
+
+  .card { position: relative; height: 120px; perspective: 800px; }
+  @media (max-width: 540px) { .card { height: 92px; } }
+  .flip { position: absolute; inset: 0; transition: transform .5s ease; transform-style: preserve-3d; }
+  .face {
+    position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; text-align: center;
+    padding: 10px; border-radius: 14px; box-shadow: 0 10px 22px -10px var(--shadow);
+    backface-visibility: hidden; -webkit-backface-visibility: hidden;
+    border: 1px solid rgba(0,0,0,.08);
+  }
+  .front { background: var(--card-front); color: #101223; transform: rotateY(180deg); font-weight: 600; }
+  .back { background: linear-gradient(135deg, var(--card-back), #a8fffe); color: #0b0c1a; }
+  .card.revealed .flip { transform: rotateY(180deg); }
+  .card.matched .flip { transform: rotateY(180deg) scale(1.02); }
+
+  .done { display: none; position: fixed; inset: 0; background: rgba(0,0,0,.5); align-items: center; justify-content: center; padding: 16px; z-index: 20; }
+  .done .inner { background: #16172b; color: var(--text); border: 1px solid rgba(255,255,255,.12); border-radius: 16px; padding: 20px; width: min(520px, 92vw); text-align: center; }
+  .done.show { display: flex; }
+</style>
+</head>
+<body>
+  <header>
+    <h1>용어 매칭 카드 뒤집기</h1>
+    <p>아래의 <b>고정 세트</b> 안에서만 매칭합니다. (난이도/커스텀 없음)</p>
+  </header>
+
+  <div class="toolbar" role="toolbar" aria-label="게임 도구 모음">
+    <button id="newGame" class="primary" aria-label="새 게임 시작">새 게임</button>
+    <button id="reset" aria-label="현재 보드 재시작">재시작</button>
+  </div>
+
+  <div class="stats" aria-live="polite">
+    <span class="pill">매칭: <b id="matched">0</b>/<span id="total">0</span></span>
+    <span class="pill">시도: <b id="tries">0</b></span>
+    <span class="pill">정확도: <b id="acc">0%</b></span>
+    <span class="pill">시간: <b id="time">00:00</b></span>
+  </div>
+
+  <main>
+    <div class="board-wrap">
+      <div id="board" class="board" aria-label="카드 보드"></div>
+    </div>
+  </main>
+
+  <div class="done" id="doneModal" role="dialog" aria-modal="true" aria-labelledby="doneTitle">
+    <div class="inner">
+      <h2 id="doneTitle">클리어! 🎉</h2>
+      <p id="doneStats" style="color:var(--muted); margin: 8px 0 16px;"></p>
+      <div style="display:flex; gap:8px; justify-content:center; flex-wrap: wrap;">
+        <button id="again" class="primary">다시 시작</button>
+        <button id="closeModal" style="background:transparent;border:1px solid rgba(255,255,255,.2);">닫기</button>
+      </div>
+    </div>
+  </div>
+
+<script>
+/** ---------- 고정 데이터 세트 ---------- **/
+const fixedPairs = [
+  ["설탕", "물에 녹음, 뜨거나 가라앉은 것이 없음"],
+  ["소금", "물에 녹음, 뜨거나 가라앉은 것이 없음"],
+  ["탄산칼슘가루", "녹지 않고 물에 퍼져 물이 뿌옇게 됨"],
+  ["용질", "다른 물질에 녹는 물질"],
+  ["용매", "다른 물질을 녹이는 물질"],
+  ["용해", "한 물질이 다른 물질에 녹아 골고루 섞이는 현상"],
+  ["용액", "용매와 용질이 골고루 섞여 있는 물질"],
+  ["온도가 높을수록", "용질이 잘 녹는다"],
+  ["온도가 낮을수록", "용질이 잘 녹지 않고 가라앉는다"]
+];
+
+/** ---------- 전역 상태 ---------- **/
+let gameState = {
+  pairs: [],         // [["term","def"], ...]
+  cards: [],         // [{id, kind:'term'|'def', pairId, text, el, locked, revealed}]
+  firstPick: null,
+  secondPick: null,
+  tries: 0,
+  matchedPairs: 0,
+  totalPairs: 0,
+  timer: null,
+  seconds: 0,
+  gridCols: 5,
+};
+
+const $ = (sel, root=document) => root.querySelector(sel);
+
+/** ---------- 유틸 ---------- **/
+function shuffle(array) {
+  for (let i = array.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [array[i], array[j]] = [array[j], array[i]];
+  }
+  return array;
+}
+function formatTime(s) {
+  const m = Math.floor(s/60).toString().padStart(2,'0');
+  const ss = (s%60).toString().padStart(2,'0');
+  return `${m}:${ss}`;
+}
+function escapeHtml(str) {
+  return str.replace(/[&<>"']/g, s => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[s]));
+}
+
+/** ---------- 보드 생성 ---------- **/
+function buildCards(pairs) {
+  const cards = [];
+  pairs.forEach((p, idx) => {
+    const [term, def] = p;
+    cards.push({ id:`t-${idx}`, kind:'term', pairId: idx, text: term, locked:false, revealed:false });
+    cards.push({ id:`d-${idx}`, kind:'def', pairId: idx, text: def, locked:false, revealed:false });
+  });
+  return shuffle(cards);
+}
+
+function renderBoard() {
+  const board = $("#board");
+  board.innerHTML = "";
+  board.style.setProperty('--cols', gameState.gridCols);
+  gameState.cards.forEach((c) => {
+    const card = document.createElement('button');
+    card.className = 'card';
+    card.type = 'button';
+    card.setAttribute('aria-label', '카드');
+    card.dataset.id = c.id;
+    card.innerHTML = `
+      <div class="flip">
+        <div class="face back">❓ 용어/정의</div>
+        <div class="face front">${escapeHtml(c.text)}</div>
+      </div>
+    `;
+    c.el = card;
+    board.appendChild(card);
+  });
+}
+
+function calcGridCols() {
+  const n = gameState.totalPairs * 2;
+  // 18장의 경우 5열이 보기 좋음, 6열까지 확장
+  if (n <= 12) gameState.gridCols = 4;
+  else if (n <= 20) gameState.gridCols = 5;
+  else gameState.gridCols = 6;
+}
+
+/** ---------- 게임 로직 ---------- **/
+let boardLocked = false;
+
+function reveal(card) { card.revealed = true; card.el.classList.add('revealed'); }
+function hide(cards) { cards.forEach(c => { c.revealed = false; c.el.classList.remove('revealed'); }); }
+function lock(cards) {
+  cards.forEach(c => {
+    c.locked = true;
+    c.el.classList.add('matched');
+    c.el.setAttribute('aria-label', '매칭 완료 카드');
+  });
+}
+function resetPicks() { gameState.firstPick = null; gameState.secondPick = null; }
+
+function onCardClick(e) {
+  const btn = e.target.closest('.card');
+  if (!btn) return;
+  const id = btn.dataset.id;
+  const card = gameState.cards.find(c => c.id === id);
+  if (!card || card.locked) return;
+  if (boardLocked) return;
+  if (btn.classList.contains('revealed')) return;
+
+  reveal(card);
+
+  if (!gameState.firstPick) { gameState.firstPick = card; return; }
+  if (card.id === gameState.firstPick.id) return;
+
+  gameState.secondPick = card;
+  boardLocked = true;
+  gameState.tries++;
+  updateStats();
+
+  const isMatch = (gameState.firstPick.pairId === gameState.secondPick.pairId) &&
+                  (gameState.firstPick.kind !== gameState.secondPick.kind);
+
+  if (isMatch) {
+    setTimeout(() => {
+      lock([gameState.firstPick, gameState.secondPick]);
+      gameState.matchedPairs++;
+      updateStats();
+      resetPicks();
+      boardLocked = false;
+      checkDone();
+    }, 350);
+  } else {
+    setTimeout(() => {
+      hide([gameState.firstPick, gameState.secondPick]);
+      resetPicks();
+      boardLocked = false;
+    }, 650);
+  }
+}
+
+function updateStats() {
+  $("#matched").textContent = gameState.matchedPairs;
+  $("#total").textContent = gameState.totalPairs;
+  $("#tries").textContent = gameState.tries;
+  const acc = gameState.tries ? Math.round((gameState.matchedPairs / gameState.tries) * 100) : 0;
+  $("#acc").textContent = `${acc}%`;
+}
+
+function checkDone() {
+  if (gameState.matchedPairs >= gameState.totalPairs) {
+    stopTimer();
+    const acc = $("#acc").textContent;
+    $("#doneStats").textContent = `시간 ${formatTime(gameState.seconds)} · 시도 ${gameState.tries} · 정확도 ${acc}`;
+    $("#doneModal").classList.add('show');
+  }
+}
+
+/** ---------- 타이머 ---------- **/
+function startTimer() {
+  gameState.timer = setInterval(() => {
+    gameState.seconds++;
+    $("#time").textContent = formatTime(gameState.seconds);
+  }, 1000);
+}
+function stopTimer() { if (gameState.timer) clearInterval(gameState.timer); gameState.timer = null; }
+
+/** ---------- 재시작/새 게임 ---------- **/
+function restartSameSet() {
+  stopTimer();
+  gameState.cards = buildCards(gameState.pairs);
+  gameState.matchedPairs = 0;
+  gameState.tries = 0;
+  gameState.seconds = 0;
+  resetPicks();
+  calcGridCols();
+  renderBoard();
+  updateStats();
+  startTimer();
+}
+function startNewGame() {
+  stopTimer();
+  const chosen = fixedPairs.slice(); // 고정 세트
+  gameState.pairs = chosen;
+  gameState.cards = buildCards(chosen);
+  gameState.totalPairs = chosen.length;
+  gameState.matchedPairs = 0;
+  gameState.tries = 0;
+  gameState.seconds = 0;
+  resetPicks();
+  calcGridCols();
+  renderBoard();
+  updateStats();
+  startTimer();
+}
+
+/** ---------- 초기화 ---------- **/
+function attachHandlers() {
+  $("#board").addEventListener('click', onCardClick);
+  $("#newGame").addEventListener('click', () => startNewGame());
+  $("#reset").addEventListener('click', () => restartSameSet());
+  $("#again").addEventListener('click', () => { $("#doneModal").classList.remove('show'); restartSameSet(); });
+  $("#closeModal").addEventListener('click', () => { $("#doneModal").classList.remove('show'); });
+}
+function init() { attachHandlers(); startNewGame(); }
+document.addEventListener('DOMContentLoaded', init);
+</script>
+</body>
+</html>
